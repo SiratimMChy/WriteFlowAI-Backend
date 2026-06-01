@@ -2,12 +2,17 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { User } from '../modules/user/user.model';
 
+
+const backendUrl = process.env.NODE_ENV === 'production' 
+  ? 'https://writeflowai-backend.onrender.com' 
+  : `http://localhost:${process.env.PORT || 5000}`;
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      callbackURL: `http://localhost:${process.env.PORT || 5000}/api/auth/google/callback`,
+      callbackURL: `${backendUrl}/api/auth/google/callback`,
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
@@ -19,7 +24,6 @@ passport.use(
           return done(new Error('No email from Google profile'), undefined);
         }
 
-        // Find existing user or create new one
         let user = await User.findOne({ email });
 
         if (!user) {
@@ -27,13 +31,11 @@ passport.use(
             name,
             email,
             image,
-            // No password for Google OAuth users
             role: 'USER',
             plan: 'free',
             status: 'active',
           });
         } else {
-          // Update image if user exists and has a newer Google photo
           if (image && user.image !== image) {
             user.image = image;
             await user.save();
@@ -45,7 +47,7 @@ passport.use(
         return done(err as Error, undefined);
       }
     }
-  )
+  ) 
 );
 
 export default passport;
