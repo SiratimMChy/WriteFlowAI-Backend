@@ -23,6 +23,40 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const draft = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { prompt, tone, keywords } = req.body;
+
+    if (!prompt) {
+      res.status(400).json({ success: false, message: 'Prompt is required' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}". 
+    Tone: ${tone || 'Professional'}. 
+    Keywords to include: ${keywords || 'None'}.
+    Return ONLY the drafted content, properly formatted with paragraphs.`;
+
+    const result = await model.generateContentStream(fullPrompt);
+    
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        // Vercel AI SDK data stream protocol for text chunk
+        res.write(`0:${JSON.stringify(chunkText)}\n`);
+      }
+    }
+    res.end();
+  } catch (error: any) {
+    res.write(`3:${JSON.stringify(error.message)}\n`);
+    res.end();
+  }
+};
+
 export const generateDescription = async (req: Request, res: Response): Promise<void> => {
   try {
     const { title } = req.body;
