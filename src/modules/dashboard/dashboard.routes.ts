@@ -1,9 +1,12 @@
 import express from 'express';
-import { getStats, getChartData } from './dashboard.controller';
+import { getStats, getChartData, getPublicStats } from './dashboard.controller';
 import { protect } from '../../middlewares/auth.middleware';
 import { admin } from '../../middlewares/admin.middleware';
 
 const router = express.Router();
+
+// Public route — no auth required
+router.get('/public-stats', getPublicStats);
 
 router.use(protect, admin);
 

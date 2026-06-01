@@ -3,6 +3,32 @@ import { User } from '../user/user.model';
 import { Item } from '../item/item.model';
 import { Booking } from '../booking/booking.model';
 
+// Public endpoint - no auth required
+export const getPublicStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const [totalUsers, totalTemplates] = await Promise.all([
+      User.countDocuments(),
+      Item.countDocuments(),
+    ]);
+
+    // Estimate words generated: assume ~500 words per booking/generation event
+    const totalGenerations = await Booking.countDocuments();
+    const estimatedWordsGenerated = totalGenerations * 500;
+
+    res.json({
+      success: true,
+      data: {
+        totalUsers,
+        totalTemplates,
+        wordsGenerated: estimatedWordsGenerated,
+        uptimeGuarantee: 99.9,
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const getStats = async (req: Request, res: Response): Promise<void> => {
   try {
     const totalUsers = await User.countDocuments();
