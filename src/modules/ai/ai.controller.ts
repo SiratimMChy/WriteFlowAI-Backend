@@ -34,26 +34,77 @@ export const draft = async (req: Request, res: Response): Promise<void> => {
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}". 
-    Tone: ${tone || 'Professional'}. 
-    Keywords to include: ${keywords || 'None'}.
-    Return ONLY the drafted content, properly formatted with paragraphs.`;
+    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}".
+Tone: ${tone || 'Professional'}.
+Keywords to include: ${keywords || 'None'}.
+Return ONLY the drafted content, properly formatted with paragraphs. Do not include any preamble or meta-commentary.`;
 
     const result = await model.generateContentStream(fullPrompt);
     
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
       if (chunkText) {
-        // Vercel AI SDK data stream protocol for text chunk
-        res.write(`0:${JSON.stringify(chunkText)}\n`);
+        res.write(chunkText);
       }
     }
     res.end();
   } catch (error: any) {
-    res.write(`3:${JSON.stringify(error.message)}\n`);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: error.message });
+    } else {
+      res.end();
+    }
+  }
+};
+
+export const rewrite = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { prompt, action, format } = req.body;
+
+    if (!prompt) {
+      res.status(400).json({ success: false, message: 'Prompt is required' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    const actionDescriptions: Record<string, string> = {
+      grammar: 'Fix all grammar, spelling, and punctuation errors while keeping the original meaning.',
+      shorten: 'Shorten the text significantly while preserving the key message.',
+      lengthen: 'Expand and elaborate on the text with more detail and examples.',
+      professional: 'Rewrite the text in a professional, formal business tone.',
+      casual: 'Rewrite the text in a friendly, casual conversational tone.',
+    };
+
+    const actionInstruction = actionDescriptions[action] || actionDescriptions.grammar;
+    const formatInstruction = format === 'bullets' ? 'Format the output as a bulleted list.' : format === 'paragraphs' ? 'Format the output as well-structured paragraphs.' : 'Keep the original format.';
+
+    const fullPrompt = `${actionInstruction} ${formatInstruction}\n\nText to rewrite:\n${prompt}\n\nReturn ONLY the rewritten content, no preamble.`;
+
+    const result = await model.generateContentStream(fullPrompt);
+    
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        res.write(chunkText);
+      }
+    }
     res.end();
+  } catch (error: any) {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: error.message });
+    } else {
+      res.end();
+    }
   }
 };
 
