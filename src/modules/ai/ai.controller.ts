@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY || ''
+});
 
 export const chat = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -17,23 +19,21 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    const geminiHistory = messages.slice(0, -1).map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }]
+    const formattedMessages = messages.map(m => ({
+      role: m.role === 'user' ? 'user' : m.role === 'system' ? 'system' : 'assistant',
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
     }));
 
-    const lastMessage = messages[messages.length - 1];
-    const prompt = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
+    const stream = await groq.chat.completions.create({
+      model: 'llama3-70b-8192',
+      messages: formattedMessages,
+      stream: true,
+    });
 
-    const chatSession = model.startChat({ history: geminiHistory });
-    const result = await chatSession.sendMessageStream(prompt);
-
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
-      if (chunkText) {
-        res.write(`0:${JSON.stringify(chunkText)}\n`);
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        res.write(`0:${JSON.stringify(content)}\n`);
       }
     }
     res.end();
@@ -61,18 +61,18 @@ export const draft = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}".
-Tone: ${tone || 'Professional'}.
-Keywords to include: ${keywords || 'None'}.
-Return ONLY the drafted content, properly formatted with paragraphs. Do not include any preamble or meta-commentary.`;
+    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}".\nTone: ${tone || 'Professional'}.\nKeywords to include: ${keywords || 'None'}.\nReturn ONLY the drafted content, properly formatted with paragraphs. Do not include any preamble or meta-commentary.`;
 
-    const result = await model.generateContentStream(fullPrompt);
+    const stream = await groq.chat.completions.create({
+      model: 'llama3-70b-8192',
+      messages: [{ role: 'user', content: fullPrompt }],
+      stream: true,
+    });
     
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
-      if (chunkText) {
-        res.write(chunkText);
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        res.write(content);
       }
     }
     res.end();
@@ -99,8 +99,6 @@ export const rewrite = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
     const actionDescriptions: Record<string, string> = {
       grammar: 'Fix all grammar, spelling, and punctuation errors while keeping the original meaning.',
       shorten: 'Shorten the text significantly while preserving the key message.',
@@ -114,12 +112,16 @@ export const rewrite = async (req: Request, res: Response): Promise<void> => {
 
     const fullPrompt = `${actionInstruction} ${formatInstruction}\n\nText to rewrite:\n${prompt}\n\nReturn ONLY the rewritten content, no preamble.`;
 
-    const result = await model.generateContentStream(fullPrompt);
+    const stream = await groq.chat.completions.create({
+      model: 'llama3-70b-8192',
+      messages: [{ role: 'user', content: fullPrompt }],
+      stream: true,
+    });
     
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
-      if (chunkText) {
-        res.write(chunkText);
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        res.write(content);
       }
     }
     res.end();
@@ -141,12 +143,14 @@ export const generateDescription = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Generate a compelling and detailed description for an AI content generation template titled: "${title}". Keep it under 150 words.`;
+    const prompt = `Generate a compelling and detailed description for an AI content generation template titled: "${title}". Keep it under 150 words. Return only the description without quotes or preamble.`;
     
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const description = response.text();
+    const response = await groq.chat.completions.create({
+      model: 'llama3-70b-8192',
+      messages: [{ role: 'user', content: prompt }],
+    });
+    
+    const description = response.choices[0]?.message?.content || "";
 
     res.json({ success: true, message: 'Request successful', data: { description } });
   } catch (error: any) {
@@ -163,13 +167,15 @@ export const reviewSummary = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const reviewsText = reviews.map((r: any) => `- Rating: ${r.rating}/5, Comment: ${r.comment}`).join('\n');
-    const prompt = `Summarize the following customer reviews and determine the overall sentiment (Positive, Neutral, or Negative).\n\nReviews:\n${reviewsText}\n\nProvide the summary in a concise paragraph followed by the sentiment.`;
+    const prompt = `Summarize the following customer reviews and determine the overall sentiment (Positive, Neutral, or Negative).\n\nReviews:\n${reviewsText}\n\nProvide the summary in a concise paragraph followed by the sentiment. Return only the summary and sentiment without preamble.`;
     
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const summary = response.text();
+    const response = await groq.chat.completions.create({
+      model: 'llama3-70b-8192',
+      messages: [{ role: 'user', content: prompt }],
+    });
+    
+    const summary = response.choices[0]?.message?.content || "";
 
     res.json({ success: true, message: 'Request successful', data: { summary } });
   } catch (error: any) {
