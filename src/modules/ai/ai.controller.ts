@@ -5,21 +5,45 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 export const chat = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { prompt } = req.body;
+    const { messages } = req.body;
     
-    if (!prompt) {
-      res.status(400).json({ success: false, message: 'Prompt is required' });
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ success: false, message: 'Messages are required' });
       return;
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
 
-    res.json({ success: true, message: 'Request successful', data: { text } });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    const geminiHistory = messages.slice(0, -1).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }]
+    }));
+
+    const lastMessage = messages[messages.length - 1];
+    const prompt = typeof lastMessage.content === 'string' ? lastMessage.content : JSON.stringify(lastMessage.content);
+
+    const chatSession = model.startChat({ history: geminiHistory });
+    const result = await chatSession.sendMessageStream(prompt);
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        res.write(`0:${JSON.stringify(chunkText)}\n`);
+      }
+    }
+    res.end();
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: error.message });
+    } else {
+      res.write(`3:${JSON.stringify(error.message)}\n`);
+      res.end();
+    }
   }
 };
 
