@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY as string });
-const defaultModel = "llama3-8b-8192";
+const defaultModel = "llama-3.3-70b-versatile";
 
 export const chat = async (req: Request, res: Response): Promise<void> => {
   try {
