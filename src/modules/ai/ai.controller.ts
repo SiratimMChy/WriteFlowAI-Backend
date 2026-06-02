@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
 import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || ''
-});
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY as string });
+const defaultModel = "llama3-8b-8192";
 
 export const chat = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -19,21 +18,21 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const formattedMessages = messages.map(m => ({
-      role: m.role === 'user' ? 'user' : m.role === 'system' ? 'system' : 'assistant',
+    const groqMessages = messages.map((m: any) => ({
+      role: (m.role === 'user' ? 'user' : 'assistant') as "user" | "assistant",
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
     }));
 
     const stream = await groq.chat.completions.create({
-      model: 'llama3-70b-8192',
-      messages: formattedMessages,
+      messages: groqMessages,
+      model: defaultModel,
       stream: true,
     });
 
     for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
-      if (content) {
-        res.write(`0:${JSON.stringify(content)}\n`);
+      const chunkText = chunk.choices[0]?.delta?.content || "";
+      if (chunkText) {
+        res.write(`0:${JSON.stringify(chunkText)}\n`);
       }
     }
     res.end();
@@ -61,18 +60,21 @@ export const draft = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}".\nTone: ${tone || 'Professional'}.\nKeywords to include: ${keywords || 'None'}.\nReturn ONLY the drafted content, properly formatted with paragraphs. Do not include any preamble or meta-commentary.`;
+    const fullPrompt = `You are an expert AI copywriter. Write a draft based on the following topic/prompt: "${prompt}".
+Tone: ${tone || 'Professional'}.
+Keywords to include: ${keywords || 'None'}.
+Return ONLY the drafted content, properly formatted with paragraphs. Do not include any preamble or meta-commentary.`;
 
     const stream = await groq.chat.completions.create({
-      model: 'llama3-70b-8192',
       messages: [{ role: 'user', content: fullPrompt }],
+      model: defaultModel,
       stream: true,
     });
     
     for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
-      if (content) {
-        res.write(content);
+      const chunkText = chunk.choices[0]?.delta?.content || "";
+      if (chunkText) {
+        res.write(chunkText);
       }
     }
     res.end();
@@ -113,15 +115,15 @@ export const rewrite = async (req: Request, res: Response): Promise<void> => {
     const fullPrompt = `${actionInstruction} ${formatInstruction}\n\nText to rewrite:\n${prompt}\n\nReturn ONLY the rewritten content, no preamble.`;
 
     const stream = await groq.chat.completions.create({
-      model: 'llama3-70b-8192',
       messages: [{ role: 'user', content: fullPrompt }],
+      model: defaultModel,
       stream: true,
     });
     
     for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
-      if (content) {
-        res.write(content);
+      const chunkText = chunk.choices[0]?.delta?.content || "";
+      if (chunkText) {
+        res.write(chunkText);
       }
     }
     res.end();
@@ -143,14 +145,13 @@ export const generateDescription = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const prompt = `Generate a compelling and detailed description for an AI content generation template titled: "${title}". Keep it under 150 words. Return only the description without quotes or preamble.`;
+    const prompt = `Generate a compelling and detailed description for an AI content generation template titled: "${title}". Keep it under 150 words.`;
     
-    const response = await groq.chat.completions.create({
-      model: 'llama3-70b-8192',
+    const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
+      model: defaultModel,
     });
-    
-    const description = response.choices[0]?.message?.content || "";
+    const description = completion.choices[0]?.message?.content || "";
 
     res.json({ success: true, message: 'Request successful', data: { description } });
   } catch (error: any) {
@@ -168,14 +169,13 @@ export const reviewSummary = async (req: Request, res: Response): Promise<void> 
     }
 
     const reviewsText = reviews.map((r: any) => `- Rating: ${r.rating}/5, Comment: ${r.comment}`).join('\n');
-    const prompt = `Summarize the following customer reviews and determine the overall sentiment (Positive, Neutral, or Negative).\n\nReviews:\n${reviewsText}\n\nProvide the summary in a concise paragraph followed by the sentiment. Return only the summary and sentiment without preamble.`;
+    const prompt = `Summarize the following customer reviews and determine the overall sentiment (Positive, Neutral, or Negative).\n\nReviews:\n${reviewsText}\n\nProvide the summary in a concise paragraph followed by the sentiment.`;
     
-    const response = await groq.chat.completions.create({
-      model: 'llama3-70b-8192',
+    const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
+      model: defaultModel,
     });
-    
-    const summary = response.choices[0]?.message?.content || "";
+    const summary = completion.choices[0]?.message?.content || "";
 
     res.json({ success: true, message: 'Request successful', data: { summary } });
   } catch (error: any) {
