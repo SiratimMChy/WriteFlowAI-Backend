@@ -29,10 +29,14 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
       stream: true,
     });
 
+    // Send a text-start chunk as required by UIMessageStream protocol
+    res.write(`${JSON.stringify({ type: 'text-start', id: 'ai-msg' })}\n`);
+
     for await (const chunk of stream) {
       const chunkText = chunk.choices[0]?.delta?.content || "";
       if (chunkText) {
-        res.write(`0:${JSON.stringify(chunkText)}\n`);
+        // Send a text-delta chunk
+        res.write(`${JSON.stringify({ type: 'text-delta', id: 'ai-msg', delta: chunkText })}\n`);
       }
     }
     res.end();

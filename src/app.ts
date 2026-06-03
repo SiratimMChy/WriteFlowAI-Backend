@@ -76,6 +76,8 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/ai', aiRoutes);
+// Alias for legacy/deployed frontend that expects AI endpoints directly under /api
+app.use('/api', aiRoutes);
 app.use('/api/settings', settingsRoutes);
 
 export default app;
