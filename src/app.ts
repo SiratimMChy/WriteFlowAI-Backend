@@ -45,6 +45,7 @@ import bookingRoutes from './modules/booking/booking.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import aiRoutes from './modules/ai/ai.routes';
 import settingsRoutes from './modules/settings/settings.routes';
+import documentRoutes from './modules/document/document.routes';
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Server is healthy' });
@@ -79,5 +80,6 @@ app.use('/api/ai', aiRoutes);
 // Alias for legacy/deployed frontend that expects AI endpoints directly under /api
 app.use('/api', aiRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/documents', documentRoutes);
 
 export default app;
